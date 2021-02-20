@@ -5,11 +5,11 @@ import torch.nn as nn
 from utils import ramps
 
 
-
 class consistency_weight(object):
     """
     ramp_types = ['sigmoid_rampup', 'linear_rampup', 'cosine_rampup', 'log_rampup', 'exp_rampup']
     """
+
     def __init__(self, final_w, iters_per_epoch, rampup_starts=0, rampup_ends=7, ramp_type='sigmoid_rampup'):
         self.final_w = final_w
         self.iters_per_epoch = iters_per_epoch
@@ -28,9 +28,11 @@ class consistency_weight(object):
 
 
 def CE_loss(input_logits, target_targets, ignore_index, temperature=1):
-    return F.cross_entropy(input_logits/temperature, target_targets, ignore_index=ignore_index)
+    return F.cross_entropy(input_logits / temperature, target_targets, ignore_index=ignore_index)
 
 # for FocalLoss
+
+
 def softmax_helper(x):
     # copy from: https://github.com/MIC-DKFZ/nnUNet/blob/master/nnunet/utilities/nd_softmax.py
     rpt = [1 for _ in range(len(x.size()))]
@@ -39,28 +41,31 @@ def softmax_helper(x):
     e_x = torch.exp(x - x_max)
     return e_x / e_x.sum(1, keepdim=True).repeat(*rpt)
 
+
 def get_alpha(supervised_loader):
     # get number of classes
     num_labels = 0
     for image_batch, label_batch in supervised_loader:
-        label_batch.data[label_batch.data==255] = 0 # pixels of ignore class added to background
+        label_batch.data[label_batch.data == 255] = 0  # pixels of ignore class added to background
         l_unique = torch.unique(label_batch.data)
         list_unique = [element.item() for element in l_unique.flatten()]
-        num_labels = max(max(list_unique),num_labels)
+        num_labels = max(max(list_unique), num_labels)
     num_classes = num_labels + 1
     # count class occurrences
     alpha = [0 for i in range(num_classes)]
     for image_batch, label_batch in supervised_loader:
-        label_batch.data[label_batch.data==255] = 0 # pixels of ignore class added to background
+        label_batch.data[label_batch.data == 255] = 0  # pixels of ignore class added to background
         l_unique = torch.unique(label_batch.data)
         list_unique = [element.item() for element in l_unique.flatten()]
-        l_unique_count = torch.stack([(label_batch.data==x_u).sum() for x_u in l_unique]) # tensor([65920, 36480])
+        l_unique_count = torch.stack([(label_batch.data == x_u).sum() for x_u in l_unique])  # tensor([65920, 36480])
         list_count = [count.item() for count in l_unique_count.flatten()]
         for index in list_unique:
             alpha[index] += list_count[list_unique.index(index)]
     return alpha
 
 # for FocalLoss
+
+
 def softmax_helper(x):
     # copy from: https://github.com/MIC-DKFZ/nnUNet/blob/master/nnunet/utilities/nd_softmax.py
     rpt = [1 for _ in range(len(x.size()))]
@@ -110,7 +115,7 @@ class FocalLoss(nn.Module):
             logit = logit.view(-1, logit.size(-1))
         target = torch.squeeze(target, 1)
         target = target.view(-1, 1)
-	
+
         alpha = self.alpha
 
         if alpha is None:
@@ -119,7 +124,7 @@ class FocalLoss(nn.Module):
             assert len(alpha) == num_class
             alpha = torch.FloatTensor(alpha).view(num_class, 1)
             alpha = alpha / alpha.sum()
-	    alpha = 1/alpha # inverse of class frequency
+            alpha = 1 / alpha  # inverse of class frequency
         elif isinstance(alpha, float):
             alpha = torch.ones(num_class, 1)
             alpha = alpha * (1 - self.alpha)
@@ -127,24 +132,24 @@ class FocalLoss(nn.Module):
 
         else:
             raise TypeError('Not support alpha type')
-        
+
         if alpha.device != logit.device:
             alpha = alpha.to(logit.device)
 
         idx = target.cpu().long()
 
         one_hot_key = torch.FloatTensor(target.size(0), num_class).zero_()
-	
-	# to resolve error in idx in scatter_
-	idx[idx==225]=0
-        
+
+        # to resolve error in idx in scatter_
+        idx[idx == 225] = 0
+
         one_hot_key = one_hot_key.scatter_(1, idx, 1)
         if one_hot_key.device != logit.device:
             one_hot_key = one_hot_key.to(logit.device)
 
         if self.smooth:
             one_hot_key = torch.clamp(
-                one_hot_key, self.smooth/(num_class-1), 1.0 - self.smooth)
+                one_hot_key, self.smooth / (num_class - 1), 1.0 - self.smooth)
         pt = (one_hot_key * logit).sum(1) + self.smooth
         logpt = pt.log()
 
@@ -165,20 +170,21 @@ class abCE_loss(nn.Module):
     """
     Annealed-Bootstrapped cross-entropy loss
     """
+
     def __init__(self, iters_per_epoch, epochs, num_classes, weight=None,
-                        reduction='mean', thresh=0.7, min_kept=1, ramp_type='log_rampup'):
+                 reduction='mean', thresh=0.7, min_kept=1, ramp_type='log_rampup'):
         super(abCE_loss, self).__init__()
         self.weight = torch.FloatTensor(weight) if weight is not None else weight
         self.reduction = reduction
         self.thresh = thresh
         self.min_kept = min_kept
         self.ramp_type = ramp_type
-        
+
         if ramp_type is not None:
             self.rampup_func = getattr(ramps, ramp_type)
             self.iters_per_epoch = iters_per_epoch
             self.num_classes = num_classes
-            self.start = 1/num_classes
+            self.start = 1 / num_classes
             self.end = 0.9
             self.total_num_iters = (epochs - (0.6 * epochs)) * iters_per_epoch
 
@@ -197,7 +203,7 @@ class abCE_loss(nn.Module):
         sort_prob, sort_indices = prob.contiguous().view(-1, )[mask].contiguous().sort()
 
         if self.ramp_type is not None:
-            thresh =  self.threshold(curr_iter=curr_iter, epoch=epoch)
+            thresh = self.threshold(curr_iter=curr_iter, epoch=epoch)
         else:
             thresh = self.thresh
 
@@ -217,10 +223,9 @@ class abCE_loss(nn.Module):
             raise NotImplementedError('Reduction Error!')
 
 
-
 def softmax_mse_loss(inputs, targets, conf_mask=False, threshold=None, use_softmax=False):
     assert inputs.requires_grad == True and targets.requires_grad == False
-    assert inputs.size() == targets.size() # (batch_size * num_classes * H * W)
+    assert inputs.size() == targets.size()  # (batch_size * num_classes * H * W)
     inputs = F.softmax(inputs, dim=1)
     if use_softmax:
         targets = F.softmax(targets, dim=1)
@@ -229,10 +234,11 @@ def softmax_mse_loss(inputs, targets, conf_mask=False, threshold=None, use_softm
         loss_mat = F.mse_loss(inputs, targets, reduction='none')
         mask = (targets.max(1)[0] > threshold)
         loss_mat = loss_mat[mask.unsqueeze(1).expand_as(loss_mat)]
-        if loss_mat.shape.numel() == 0: loss_mat = torch.tensor([0.]).to(inputs.device)
+        if loss_mat.shape.numel() == 0:
+            loss_mat = torch.tensor([0.]).to(inputs.device)
         return loss_mat.mean()
     else:
-        return F.mse_loss(inputs, targets, reduction='mean') # take the mean over the batch_size
+        return F.mse_loss(inputs, targets, reduction='mean')  # take the mean over the batch_size
 
 
 def softmax_kl_loss(inputs, targets, conf_mask=False, threshold=None, use_softmax=False):
@@ -241,12 +247,13 @@ def softmax_kl_loss(inputs, targets, conf_mask=False, threshold=None, use_softma
     input_log_softmax = F.log_softmax(inputs, dim=1)
     if use_softmax:
         targets = F.softmax(targets, dim=1)
-    
+
     if conf_mask:
         loss_mat = F.kl_div(input_log_softmax, targets, reduction='none')
         mask = (targets.max(1)[0] > threshold)
         loss_mat = loss_mat[mask.unsqueeze(1).expand_as(loss_mat)]
-        if loss_mat.shape.numel() == 0: loss_mat = torch.tensor([0.]).to(inputs.device)
+        if loss_mat.shape.numel() == 0:
+            loss_mat = torch.tensor([0.]).to(inputs.device)
         return loss_mat.sum() / mask.shape.numel()
     else:
         return F.kl_div(input_log_softmax, targets, reduction='mean')
@@ -259,29 +266,27 @@ def softmax_js_loss(inputs, targets, **_):
 
     M = (F.softmax(inputs, dim=1) + targets) * 0.5
     kl1 = F.kl_div(F.log_softmax(inputs, dim=1), M, reduction='mean')
-    kl2 = F.kl_div(torch.log(targets+epsilon), M, reduction='mean')
+    kl2 = F.kl_div(torch.log(targets + epsilon), M, reduction='mean')
     return (kl1 + kl2) * 0.5
 
 
-
 def pair_wise_loss(unsup_outputs, size_average=True, nbr_of_pairs=8):
-	"""
-	Pair-wise loss in the sup. mat.
-	"""
-	if isinstance(unsup_outputs, list):
-		unsup_outputs = torch.stack(unsup_outputs)
+    """
+    Pair-wise loss in the sup. mat.
+    """
+    if isinstance(unsup_outputs, list):
+        unsup_outputs = torch.stack(unsup_outputs)
 
-	# Only for a subset of the aux outputs to reduce computation and memory
-	unsup_outputs = unsup_outputs[torch.randperm(unsup_outputs.size(0))]
-	unsup_outputs = unsup_outputs[:nbr_of_pairs]
+    # Only for a subset of the aux outputs to reduce computation and memory
+    unsup_outputs = unsup_outputs[torch.randperm(unsup_outputs.size(0))]
+    unsup_outputs = unsup_outputs[:nbr_of_pairs]
 
-	temp = torch.zeros_like(unsup_outputs) # For grad purposes
-	for i, u in enumerate(unsup_outputs):
-		temp[i] = F.softmax(u, dim=1)
-	mean_prediction = temp.mean(0).unsqueeze(0) # Mean over the auxiliary outputs
-	pw_loss = ((temp - mean_prediction)**2).mean(0) # Variance
-	pw_loss = pw_loss.sum(1) # Sum over classes
-	if size_average:
-		return pw_loss.mean()
-	return pw_loss.sum()
-
+    temp = torch.zeros_like(unsup_outputs)  # For grad purposes
+    for i, u in enumerate(unsup_outputs):
+        temp[i] = F.softmax(u, dim=1)
+    mean_prediction = temp.mean(0).unsqueeze(0)  # Mean over the auxiliary outputs
+    pw_loss = ((temp - mean_prediction)**2).mean(0)  # Variance
+    pw_loss = pw_loss.sum(1)  # Sum over classes
+    if size_average:
+        return pw_loss.mean()
+    return pw_loss.sum()
