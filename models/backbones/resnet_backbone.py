@@ -24,6 +24,8 @@ class NormalResnetBackbone(nn.Module):
         return self.num_features
 
     def forward(self, x):
+        import ipdb
+        ipdb.set_trace()
         tuple_features = list()
         x = self.prefix(x)
         x = self.maxpool(x)
