@@ -87,6 +87,8 @@ class CCT(BaseModel):
     def forward(self, x_l=None, target_l=None, x_ul=None, target_ul=None, curr_iter=None, epoch=None):
         if not self.training:
             return self.main_decoder(self.encoder(x_l))
+        import ipdb
+        ipdb.set_trace()
 
         # We compute the losses in the forward pass to avoid problems encountered in muti-gpu
 
